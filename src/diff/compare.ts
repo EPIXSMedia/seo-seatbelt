@@ -1,5 +1,7 @@
 import type { Change, CheckResult, PageSignals, Severity, SignalName, SiteSignals, Snapshot } from "../types.js";
+import { countWords } from "../normalize.js";
 import { isPageError } from "../types.js";
+import { wordsChanged } from "./words.js";
 
 export interface CompareOptions {
   wordCount: { percent: number; words: number };
@@ -13,14 +15,14 @@ const SEVERITY: Record<SignalName, Severity> = {
   page: "critical", status: "critical", redirects: "critical", xRobotsTag: "critical", metaRobots: "critical",
   canonical: "critical", robotsTxt: "critical", sitemapUrls: "critical",
   title: "high", metaDescription: "high", hreflang: "high",
-  lang: "medium", pagination: "medium", headings: "medium", links: "medium", wordCount: "medium", structuredData: "medium",
+  lang: "medium", pagination: "medium", headings: "medium", links: "medium", wordCount: "medium", bodyCopy: "medium", structuredData: "medium",
 };
 
 const LABEL: Record<SignalName, string> = {
   page: "Page", status: "HTTP status", redirects: "Redirects", xRobotsTag: "X-Robots-Tag header",
   lang: "Page language", title: "Title", metaDescription: "Meta description", metaRobots: "Robots meta tag",
   canonical: "Canonical URL", hreflang: "hreflang alternates", pagination: "Pagination links", headings: "Headings",
-  links: "Links", wordCount: "Word count", structuredData: "Structured data (JSON-LD)",
+  links: "Links", wordCount: "Word count", bodyCopy: "Body copy", structuredData: "Structured data (JSON-LD)",
   robotsTxt: "robots.txt", sitemapUrls: "Sitemap URLs",
 };
 
@@ -84,6 +86,8 @@ function comparePage(page: string, before: PageSignals, after: PageSignals, opti
   if (headings !== null) changes.push(headings);
   const words = compareWordCount(page, before.wordCount, after.wordCount, options.wordCount);
   if (words !== null) changes.push(words);
+  const copy = compareBodyCopy(page, before.bodyCopy, after.bodyCopy, options.wordCount);
+  if (copy !== null) changes.push(copy);
   return changes;
 }
 
@@ -109,6 +113,20 @@ function compareWordCount(page: string, before: number, after: number, limit: Co
   if (delta <= limit.words || percent <= limit.percent) return null;
   const direction = after > before ? "+" : "-";
   return change(page, "wordCount", `Word count changed ${before} → ${after} (${direction}${percent.toFixed(1)}%)`, [String(before)], [String(after)]);
+}
+
+/**
+ * Rewritten copy, measured in words added plus words removed, so a rewrite that keeps the
+ * word count is still seen. Like the word count, it is flagged only past both limits.
+ */
+function compareBodyCopy(page: string, before: string[] | undefined, after: string[] | undefined, limit: CompareOptions["wordCount"]): Change | null {
+  if (before === undefined || after === undefined) return null;
+  const { removed, added } = multisetDifference(before, after);
+  if (removed.length === 0 && added.length === 0) return null;
+  const changed = wordsChanged(removed.join(" "), added.join(" "));
+  const percent = percentChange(countWords(before.join(" ")), changed);
+  if (changed <= limit.words || percent <= limit.percent) return null;
+  return change(page, "bodyCopy", `Body copy rewritten (${changed} words added or removed, ${percent.toFixed(1)}%)`, removed, added);
 }
 
 function percentChange(before: number, delta: number): number {

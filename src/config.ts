@@ -15,7 +15,7 @@ const DEFAULT_WORD_COUNT = 25;
 
 const signalNames = z.enum([
   "status", "redirects", "xRobotsTag", "lang", "title", "metaDescription", "metaRobots",
-  "canonical", "hreflang", "pagination", "headings", "links", "wordCount", "structuredData",
+  "canonical", "hreflang", "pagination", "headings", "links", "wordCount", "bodyCopy", "structuredData",
   "robotsTxt", "sitemapUrls",
 ]);
 

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 const HTML_EXTENSIONS = new Set([".html", ".htm"]);
@@ -19,8 +19,9 @@ export async function listHtmlFiles(dir: string, cleanUrls: boolean): Promise<Ma
   const entries = await readdir(dir, { recursive: true, withFileTypes: true });
   const pages = new Map<string, string>();
   for (const entry of entries) {
-    if (!entry.isFile() || !HTML_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
+    if (!HTML_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) continue;
     const absolute = path.join(entry.parentPath, entry.name);
+    if (!entry.isFile() && !(entry.isSymbolicLink() && (await isLinkedFile(absolute)))) continue;
     pages.set(filePathToUrlPath(path.relative(dir, absolute), cleanUrls), absolute);
   }
   return new Map([...pages.entries()].sort(([left], [right]) => left.localeCompare(right)));
@@ -28,5 +29,29 @@ export async function listHtmlFiles(dir: string, cleanUrls: boolean): Promise<Ma
 
 export async function readOptionalFile(file: string): Promise<string | null> {
   if (!existsSync(file)) return null;
+  return readFile(file, "utf8");
+}
+
+/** Whether a path is a file once links are followed (some builds link pages in rather than copying them). */
+async function isLinkedFile(file: string): Promise<boolean> {
+  try {
+    return (await stat(file)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** A file named by a URL path, read only when it sits inside `dir`. Null when there is none. */
+export async function readFileInside(dir: string, urlPath: string): Promise<string | null> {
+  let relative: string;
+  try {
+    relative = decodeURIComponent(urlPath);
+  } catch {
+    return null;
+  }
+  const file = path.resolve(dir, `./${relative}`);
+  const inside = path.relative(dir, file);
+  if (inside === ".." || inside.startsWith(`..${path.sep}`) || path.isAbsolute(inside)) return null;
+  if (!(await isLinkedFile(file))) return null;
   return readFile(file, "utf8");
 }

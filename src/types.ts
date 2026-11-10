@@ -16,6 +16,8 @@ export const pageSignalsSchema = z.object({
   headings: z.array(z.string()),
   links: z.array(z.string()),
   wordCount: z.number().int().min(0),
+  /** Blocks of body copy. Missing in baselines recorded before it was read; then only the word count is compared. */
+  bodyCopy: z.array(z.string()).optional(),
   structuredData: z.array(z.string()),
 });
 
@@ -61,6 +63,7 @@ export type SignalName =
   | "headings"
   | "links"
   | "wordCount"
+  | "bodyCopy"
   | "structuredData"
   | "robotsTxt"
   | "sitemapUrls";

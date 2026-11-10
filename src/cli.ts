@@ -152,11 +152,24 @@ async function commandHook(): Promise<number> {
   return decision.exitCode;
 }
 
-/** A hook that cannot check must not wave the change through: hand the decision to the owner. */
+/** A hook that cannot check must not wave the change through: it asks, or refuses when the owner chose "deny". */
 function hookFailure(error: unknown): number {
+  if (isAllowedByOwner(process.env)) return EXIT_CLEAN;
   const reason = `SEO Seatbelt could not check this change (${errorMessage(error)}). Ask the site owner before going ahead if it touches titles, descriptions, headings, links, URLs, robots rules or page text.`;
+  if (configuredDecision() === "deny") {
+    err(reason);
+    return EXIT_ERROR;
+  }
   out(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: reason } }));
   return EXIT_CLEAN;
+}
+
+function configuredDecision(): "ask" | "deny" {
+  try {
+    return loadConfig(process.cwd()).config.guard.decision;
+  } catch {
+    return "ask";
+  }
 }
 
 async function commandInstall(values: ReturnType<typeof parse>["values"], root: string): Promise<number> {

@@ -17,6 +17,8 @@ export interface FetchedDocument {
   redirects: string[];
   finalUrl: string;
   xRobotsTag: string | null;
+  /** The HTTP `Link` header, which can carry a canonical URL. */
+  link: string | null;
   contentType: string;
   body: string;
 }
@@ -46,6 +48,7 @@ export async function fetchDocument(url: string, timeoutMs: number): Promise<Fet
       redirects,
       finalUrl: current,
       xRobotsTag: response.headers.get("x-robots-tag"),
+      link: response.headers.get("link"),
       contentType: response.headers.get("content-type") ?? "",
       body: await readBody(response, current),
     };
