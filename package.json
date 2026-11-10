@@ -1,0 +1,70 @@
+{
+  "name": "seo-seatbelt",
+  "version": "1.0.0",
+  "description": "Stops AI coding agents (Claude Code, Codex, Cursor, Copilot) and people from changing a website's Google ranking signals — titles, meta, canonicals, robots, headings, links, redirects, copy — without the owner's approval.",
+  "keywords": [
+    "seo",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "cursor",
+    "guardrails",
+    "pre-commit",
+    "ci",
+    "regression",
+    "canonical",
+    "robots",
+    "meta-tags"
+  ],
+  "license": "MIT",
+  "author": "EPIXS Media",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EPIXSMedia/seo-seatbelt.git"
+  },
+  "homepage": "https://github.com/EPIXSMedia/seo-seatbelt#readme",
+  "bugs": {
+    "url": "https://github.com/EPIXSMedia/seo-seatbelt/issues"
+  },
+  "type": "module",
+  "bin": {
+    "seo-seatbelt": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "test": "vitest",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "cheerio": "1.2.0",
+    "picomatch": "4.0.7",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "26.6.6",
+    "@types/picomatch": "4.0.3",
+    "eslint": "10.14.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.72.2",
+    "vitest": "5.1.0"
+  }
+}

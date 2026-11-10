@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, node: 22 }
+          - { os: ubuntu-latest, node: 24 }
+          - { os: ubuntu-latest, node: 26 }
+          - { os: macos-latest, node: 24 }
+          - { os: windows-latest, node: 24 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - run: npx vitest run
+
+  # The test runner needs Node 22+, but the tool itself supports Node 20.18.1+: prove it runs there.
+  runtime-node-20:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.18.1
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: baseline → check on a tiny site
+        shell: bash
+        run: |
+          set -euo pipefail
+          site="$RUNNER_TEMP/site"
+          mkdir -p "$site/out"
+          printf '<!doctype html><html><head><title>Home</title></head><body><h1>Hi</h1></body></html>\n' > "$site/out/index.html"
+          printf '{"dir":"out"}\n' > "$site/seo-seatbelt.config.json"
+          cd "$site"
+          node "$GITHUB_WORKSPACE/dist/cli.js" baseline
+          node "$GITHUB_WORKSPACE/dist/cli.js" check
+          sed -i 's/<title>Home<\/title>/<title>Changed<\/title>/' out/index.html
+          status=0; node "$GITHUB_WORKSPACE/dist/cli.js" check || status=$?
+          test "$status" -eq 1
