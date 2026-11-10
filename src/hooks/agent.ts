@@ -37,41 +37,65 @@ export function parseAgentEvent(raw: string): AgentEvent {
   return eventSchema.parse(JSON.parse(raw === "" ? "{}" : raw));
 }
 
+/** The text after an edit, or why the edit cannot be applied to the file as it is now. */
+type EditResult = { text: string } | { problem: string };
+type Edit = z.infer<typeof editSchema>;
+
 /** Work out what files the tool call would write, with their content before and after. */
 export function changesFromEvent(event: AgentEvent, root: string): FileChange[] {
   const input = event.tool_input ?? {};
   const cwd = event.cwd ?? root;
   const write = writeInput.safeParse(input);
-  if (write.success) return [change(root, cwd, write.data.file_path, () => write.data.content)];
+  if (write.success) return [change(root, cwd, write.data.file_path, () => ({ text: write.data.content }))];
   const edit = editInput.safeParse(input);
   if (edit.success) return [change(root, cwd, edit.data.file_path, (before) => applyEdit(before, edit.data))];
   const multi = multiEditInput.safeParse(input);
-  if (multi.success) {
-    return [change(root, cwd, multi.data.file_path, (before) => multi.data.edits.reduce<string | null>(applyEdit, before))];
-  }
+  if (multi.success) return [change(root, cwd, multi.data.file_path, (before) => applyEdits(before, multi.data.edits))];
   const patch = patchText(input);
   if (patch !== null) return changesFromPatch(patch, cwd, root, readCurrent);
   return [];
 }
 
-function change(root: string, cwd: string, filePath: string, after: (before: string | null) => string | null): FileChange {
+function change(root: string, cwd: string, filePath: string, apply: (before: string | null) => EditResult): FileChange {
   const absolute = path.resolve(cwd, filePath);
-  const before = readCurrent(absolute);
-  return { path: relativeToRoot(root, absolute), before, after: after(before) };
+  const relative = relativeToRoot(root, absolute);
+  const current = readCurrent(absolute);
+  const result = apply(current);
+  if ("text" in result) return { path: relative, before: current, after: result.text };
+  return { path: relative, before: current, after: current, unreadable: result.problem };
 }
 
 function readCurrent(absolute: string): string | null {
   return existsSync(absolute) ? readFileSync(absolute, "utf8") : null;
 }
 
-function applyEdit(before: string | null, edit: z.infer<typeof editSchema>): string | null {
-  if (before === null) return edit.old_string === "" ? edit.new_string : null;
-  if (edit.old_string === "" || !before.includes(edit.old_string)) return before;
-  return edit.replace_all === true ? before.split(edit.old_string).join(edit.new_string) : before.replace(edit.old_string, () => edit.new_string);
+function applyEdits(before: string | null, edits: readonly Edit[]): EditResult {
+  let text = before;
+  for (const edit of edits) {
+    const result = applyEdit(text, edit);
+    if (!("text" in result)) return result;
+    text = result.text;
+  }
+  return { text: text ?? "" };
+}
+
+/** Apply one find-and-replace edit. A file saved with Windows line endings is matched with them removed. */
+function applyEdit(before: string | null, edit: Edit): EditResult {
+  if (before === null) return edit.old_string === "" ? { text: edit.new_string } : { problem: "the file to edit does not exist" };
+  if (edit.old_string === "") return { text: before };
+  if (before.includes(edit.old_string)) return { text: replace(before, edit) };
+  const lf = (text: string): string => text.replace(/\r\n/gu, "\n");
+  const normalized = { ...edit, old_string: lf(edit.old_string), new_string: lf(edit.new_string) };
+  if (lf(before).includes(normalized.old_string)) return { text: replace(lf(before), normalized) };
+  return { problem: "the text to replace was not found in the file" };
+}
+
+function replace(text: string, edit: Edit): string {
+  return edit.replace_all === true ? text.split(edit.old_string).join(edit.new_string) : text.replace(edit.old_string, () => edit.new_string);
 }
 
 function patchText(input: Record<string, unknown>): string | null {
-  const candidates = [input.command, input.patch, input.input];
+  const candidates = [input.command, input.cmd, input.patch, input.input];
   for (const candidate of candidates) {
     const text = Array.isArray(candidate) ? candidate.map(String).join("\n") : candidate;
     if (typeof text === "string" && text.includes("*** Begin Patch")) return text;

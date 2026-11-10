@@ -39,7 +39,12 @@ export function originOf(url: string): string | null {
 
 /** Count words the way a reader sees them, in any script (Latin, Devanagari, Telugu…). */
 export function countWords(text: string): number {
-  return text.split(/\s+/u).filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
+  return wordsOf(text).length;
+}
+
+/** The words of a text: whitespace-separated tokens holding at least one letter or digit. */
+export function wordsOf(text: string): string[] {
+  return text.split(/\s+/u).filter((token) => /[\p{L}\p{N}]/u.test(token));
 }
 
 /** JSON.stringify with object keys sorted, so key order never reads as a change. */

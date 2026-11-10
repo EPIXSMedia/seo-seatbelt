@@ -17,15 +17,29 @@ async function git(args: readonly string[], cwd: string): Promise<string> {
   return stdout;
 }
 
-/** Content of a blob, or null when it does not exist at that revision (or is too big / binary to matter). */
-async function blob(spec: string, cwd: string): Promise<string | null> {
+type Blob = { kind: "content"; text: string } | { kind: "missing" } | { kind: "unreadable"; reason: string };
+
+/** A blob's content; "missing" when it does not exist at that revision, "unreadable" when it is too big, binary or git fails. */
+async function blob(spec: string, cwd: string): Promise<Blob> {
+  let size: number;
   try {
-    const content = await git(["show", spec], cwd);
-    if (content.length > MAX_FILE_BYTES || content.includes("\u0000")) return null;
-    return content;
+    size = Number((await git(["cat-file", "-s", spec], cwd)).trim());
   } catch {
-    return null;
+    return { kind: "missing" };
   }
+  if (size > MAX_FILE_BYTES) return { kind: "unreadable", reason: "larger than 4 MiB" };
+  try {
+    const text = await git(["cat-file", "blob", spec], cwd);
+    return text.includes("\u0000") ? { kind: "unreadable", reason: "binary content" } : { kind: "content", text };
+  } catch {
+    return { kind: "unreadable", reason: "git could not read it" };
+  }
+}
+
+const NOT_PRESENT: Blob = { kind: "missing" };
+
+function textOf(value: Blob): string | null {
+  return value.kind === "content" ? value.text : null;
 }
 
 export async function gitRoot(cwd: string): Promise<string> {
@@ -53,9 +67,16 @@ export async function stagedChanges(cwd: string): Promise<{ root: string; change
   const root = await gitRoot(cwd);
   const entries = parseNameStatus(await git(["diff", "--cached", "--name-status", "-z", "-M", "--no-ext-diff"], root));
   const changes = await Promise.all(entries.map(async (entry): Promise<FileChange> => {
-    const before = entry.status === "A" ? null : await blob(`HEAD:${entry.renamedFrom ?? entry.path}`, root);
-    const after = entry.status === "D" ? null : await blob(`:${entry.path}`, root);
-    return { path: entry.path, before, after, renamedFrom: entry.status === "R" ? entry.renamedFrom : undefined };
+    const before = entry.status === "A" ? NOT_PRESENT : await blob(`HEAD:${entry.renamedFrom ?? entry.path}`, root);
+    const after = entry.status === "D" ? NOT_PRESENT : await blob(`:${entry.path}`, root);
+    const unreadable = [before, after].find((side) => side.kind === "unreadable");
+    return {
+      path: entry.path,
+      before: textOf(before),
+      after: textOf(after),
+      renamedFrom: entry.status === "R" ? entry.renamedFrom : undefined,
+      unreadable: unreadable?.kind === "unreadable" ? unreadable.reason : undefined,
+    };
   }));
   return { root, changes };
 }

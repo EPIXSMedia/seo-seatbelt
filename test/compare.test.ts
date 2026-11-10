@@ -46,10 +46,24 @@ describe("compareSnapshots", () => {
   });
 
   it("allows small copy edits but flags big ones (both limits must be passed)", () => {
-    const small = snapshot({ "/emi/": read(page({ body: `${"word ".repeat(19)}extra` })) });
+    const typo = "Enter the loan amount, the interest rate and the tenure to see the EMI you will pay each month.";
+    const small = snapshot({ "/emi/": read(page({ body: typo })) });
     expect(compareSnapshots(baseline, small, options).changes.map((change) => change.signal)).toEqual([]);
     const big = snapshot({ "/emi/": read(page({ body: "word ".repeat(120) })) });
-    expect(compareSnapshots(baseline, big, options).changes.map((change) => change.signal)).toEqual(["wordCount"]);
+    expect(compareSnapshots(baseline, big, options).changes.map((change) => change.signal)).toEqual(["wordCount", "bodyCopy"]);
+  });
+
+  it("flags a rewrite that keeps the word count", () => {
+    const rewrite = "Type in what you borrow, the yearly rate and the number of years to find out the instalment owed per month.";
+    const changes = compareSnapshots(baseline, snapshot({ "/emi/": read(page({ body: rewrite })) }), options).changes;
+    expect(changes.map((change) => change.signal)).toEqual(["bodyCopy"]);
+    expect(changes[0]?.added).toEqual([rewrite]);
+  });
+
+  it("compares body copy only when both readings have it (older baselines)", () => {
+    const old = snapshot({ "/emi/": { ...read(page()), bodyCopy: undefined } });
+    const rewrite = "Type in what you borrow, the yearly rate and the number of years to find out the instalment owed per month.";
+    expect(compareSnapshots(old, snapshot({ "/emi/": read(page({ body: rewrite })) }), options).changes).toEqual([]);
   });
 
   it("never treats an unreadable page as a pass", () => {

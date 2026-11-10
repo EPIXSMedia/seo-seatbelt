@@ -18,7 +18,16 @@ Changes that cannot move rankings, such as CSS, classes, scripts, images and sec
 
 Page title · meta description · robots meta and `X-Robots-Tag` · canonical · `hreflang` · pagination links · H1–H6 · internal and outbound links, including anchor text and `nofollow` / `sponsored` / `ugc` · body copy and word count · JSON-LD structured data · HTTP status and redirect chains · `robots.txt` · sitemap URLs · which page URLs exist (added, deleted or renamed page files).
 
-In source files it reads plain HTML and templates (PHP, Twig, Liquid, Handlebars, EJS and others), JSX/TSX, Vue, Svelte and Astro components, Next.js `metadata`, Nuxt `useHead` / `useSeoMeta`, `next-seo`, React Helmet, WordPress SEO hooks (Yoast, Rank Math, AIOSEO, SEOPress, core canonical and redirects), Markdown/MDX frontmatter, headings, links and body copy, and the redirect and URL settings in `.htaccess`, `vercel.json`, `netlify.toml`, `next.config.*` and similar files.
+In source files it reads:
+
+- plain HTML and templates (PHP, Twig, Liquid, Handlebars, EJS and others), JSX/TSX, Vue, Svelte and Astro components, including headings written as `<Typography variant="h1">`, `<motion.h1>` or `<Heading level={1}>`;
+- Next.js `metadata` / `generateMetadata`, Nuxt `useHead` / `useSeoMeta`, `next-seo`, React Helmet, JSON-LD built in code, and redirects, rewrites and `notFound()` in middleware and route code;
+- WordPress SEO hooks (Yoast, Rank Math, AIOSEO, SEOPress, core canonical and redirects);
+- Markdown, MDX and Markdoc frontmatter, headings, links and body copy, and translation files (`messages/`, `locales/`, `i18n/` …);
+- the redirect, URL and indexing settings in `.htaccess`, nginx `*.conf`, `vercel.json`, `netlify.toml`, `firebase.json`, `next.config.*`, `astro.config.*`, Hugo and Jekyll YAML / TOML and similar files;
+- its own settings, baseline and hook lines, so an agent cannot switch the guard off to get an edit through.
+
+A page, template or settings file it cannot read, such as an edit whose text does not match the file, is treated as a change that needs approval, never as a pass.
 
 ## Install
 
@@ -44,13 +53,13 @@ Add the hook to your Codex `hooks.json`. Codex then asks you to trust the new ho
 {
   "hooks": {
     "PreToolUse": [
-      { "matcher": "", "hooks": [{ "type": "command", "command": "npx --no-install seo-seatbelt hook" }] }
+      { "matcher": "", "hooks": [{ "type": "command", "command": "npx --no-install seo-seatbelt hook || exit 2" }] }
     ]
   }
 }
 ```
 
-The hook reads Codex `apply_patch` edits as well as Claude Code `Edit`, `Write` and `MultiEdit` calls. Every other tool call passes through untouched.
+The hook reads Codex `apply_patch` edits as well as Claude Code `Edit`, `Write` and `MultiEdit` calls. Every other tool call passes through untouched. `|| exit 2` means that if the hook itself cannot start, the edit is blocked rather than allowed; `init --claude` adds it for Claude Code, and upgrades a hook installed by an older version.
 
 ### Cursor, Copilot and everything else
 
@@ -71,7 +80,7 @@ SEO Seatbelt: this change can move the site's Google rankings, so it needs the s
 - **Agent hook, `"decision": "ask"` (the default):** the agent pauses and the owner answers yes or no in the agent's own permission prompt.
 - **Agent hook, `"decision": "deny"`:** the edit is refused. Use this for unattended or background agents. To let an approved change through, the owner starts that session with `SEO_SEATBELT_ALLOW=1`.
 - **Commits:** `SEO_SEATBELT_ALLOW=1 git commit …` once the owner has approved.
-- **Baseline:** after an approved change is live, run `npx seo-seatbelt baseline` and commit the new baseline.
+- **Baseline:** after an approved change is live, run `npx seo-seatbelt baseline` and commit the new baseline with `SEO_SEATBELT_ALLOW=1`. The baseline and the config are guarded too, so an agent cannot approve its own change by rewriting them.
 
 ## Checking the served site
 
@@ -84,6 +93,10 @@ npx seo-seatbelt check --json                            # machine-readable outp
 ```
 
 Same-site links, canonicals and redirects are stored as paths, so a baseline taken from production can be compared with localhost, a preview URL or a build folder.
+
+- A canonical sent in the HTTP `Link` header counts the same as one in the page.
+- Sitemap indexes are followed to every child sitemap. A site with more than 500 sitemap files is refused, never read in part.
+- A page that arrives without its closing `</html>` tag is read a second time. It counts as unreadable unless both reads agree.
 
 | Exit code | Meaning |
 | --- | --- |
@@ -139,11 +152,11 @@ jobs:
 }
 ```
 
-- `pages` / `discoverFromSitemap` / `maxPages`: which pages are read. Sitemap URLs are added up to the limit.
+- `pages` / `discoverFromSitemap` / `maxPages`: which pages are read, as paths or full URLs on the site. Sitemap URLs are added up to the limit.
 - `dir` / `cleanUrls`: read a build folder instead of fetching. With `cleanUrls`, `about.html` is served as `/about`.
 - `ignoreSelectors`: page parts left out before reading, such as rotating banners, dates and live widgets.
 - `ignoreJsonLdKeys`: structured-data keys that change on every build.
-- `wordCount`: copy changes are flagged only when **both** limits are passed, so a typo fix does not raise an alarm.
+- `wordCount`: copy changes (a new word count, or words reworded in place) are flagged only when **both** limits are passed, so a typo fix does not raise an alarm.
 - `guard.protectedFiles`: extra files where any change needs approval. `robots.txt`, sitemaps and `_redirects` are always protected.
 - `guard.contentFiles`: extra Markdown folders whose body copy counts as content.
 - `guard.routeFiles`: extra files whose existence is a URL.
@@ -162,6 +175,7 @@ const current = await takeSnapshot({ config, root });
 
 - The source-file guard reads files with fast pattern matching, not a full compiler. A title assembled at runtime from a database or API cannot be seen until it is served. The served-page check is the backstop for that.
 - The served-page check reads HTML as served, without running JavaScript. Ranking signals that only exist after client-side rendering are not seen.
+- The `"ask"` decision relies on the agent's permission prompt. An agent run in a mode that skips permission prompts never shows it, so use `"decision": "deny"` for those sessions.
 - A hook can be removed by whoever controls the machine. SEO Seatbelt stops accidents and over-eager agents; it is not access control.
 
 ## Contributing

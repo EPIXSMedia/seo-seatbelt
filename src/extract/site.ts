@@ -45,3 +45,16 @@ export function normalizeSitemapUrls(urls: readonly string[], siteOrigins: reado
   const base = siteOrigins[0] ?? "http://localhost";
   return [...new Set(urls.map((url) => normalizeUrl(url, base, siteOrigins) ?? url))].sort();
 }
+
+const LINK_HEADER_ENTRY = /<([^>]*)>([^<]*)/gu;
+const REL_PARAMETER = /;\s*rel\s*=\s*(?:"([^"]*)"|([^\s;,]+))/iu;
+
+/** URLs an HTTP `Link` header marks as canonical, e.g. `<https://example.com/a>; rel="canonical"`. */
+export function parseLinkHeaderCanonicals(header: string | null): string[] {
+  if (header === null) return [];
+  return [...header.matchAll(LINK_HEADER_ENTRY)].flatMap((entry) => {
+    const rel = REL_PARAMETER.exec(entry[2] ?? "");
+    const tokens = (rel?.[1] ?? rel?.[2] ?? "").toLowerCase().split(/\s+/u);
+    return tokens.includes("canonical") ? [entry[1] ?? ""] : [];
+  });
+}
