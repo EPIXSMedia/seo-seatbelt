@@ -25,11 +25,14 @@ In source files it reads plain HTML and templates (PHP, Twig, Liquid, Handlebars
 Requires Node.js 20.18.1 or later.
 
 ```sh
+echo "allow-git=root" >> .npmrc          # npm 12+ only installs from GitHub when the project opts in
 npm install --save-dev github:EPIXSMedia/seo-seatbelt
 npx seo-seatbelt init --url https://your-site.com --git --claude
 npx seo-seatbelt baseline
-git add seo-seatbelt.config.json .seo-seatbelt/baseline.json .claude/settings.json
+git add .npmrc seo-seatbelt.config.json .seo-seatbelt/baseline.json .claude/settings.json
 ```
+
+The `.npmrc` line lets npm 12 and later install a package straight from GitHub, here and in CI (`npm ci`). Older npm versions do not need it. npm may warn that the package's `prepare` script was skipped. That is harmless: npm has already built the package while fetching it from GitHub.
 
 `init` writes `seo-seatbelt.config.json`. `--git` installs the pre-commit hook and `--claude` adds the Claude Code hook to `.claude/settings.json`; existing settings are kept. `baseline` records the approved state of the site. Commit the baseline so every later check compares against it.
 
